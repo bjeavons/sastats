@@ -5,9 +5,9 @@ namespace DrupalorgParser;
 use QueryPath\QueryPath;
 
 /**
- *
+ * Class SaParser for parsing Drupal.org Security Advisories
  */
-class Parser {
+class SaParser {
 
     /**
      * @var string
@@ -25,6 +25,7 @@ class Parser {
     protected $dataStore;
 
     /**
+     * @param array $data_store
      *
      */
     public function __construct($data_store = array())
@@ -33,11 +34,14 @@ class Parser {
     }
 
     /**
+     * Parse SA list page and store SA data.
      *
      * @param string $html
+     *   HTML page of list of SA e.g. http://drupal.org/security/contrib
      */
     public function parseList($html)
     {
+        // @todo handle URL ?
         foreach (htmlqp($html, 'div.views-row') as $row) {
 
             $element = $row->find('.node-title');
@@ -55,7 +59,7 @@ class Parser {
 
                         break;
                     case strpos($text, 'Vulnerability') !== FALSE:
-                        $vulnerability = $this->extractVulnerability($text);
+                        $vulnerabilities = $this->extractVulnerability($text);
 
                         break;
                 }
@@ -66,13 +70,28 @@ class Parser {
             $this->setData($id, 'link', $link);
             $this->setData($id, 'project', $project);
             $this->setData($id, 'date', $date);
-            $this->setData($id, 'vulnerability', $vulnerability);
+            $this->setData($id, 'vulnerabilities', $vulnerabilities);
         }
 
     }
 
     /**
+     * Get stored SA data.
+     *
      * @return array
+     *      Array of stored SA data keyed by advisory ID.
+     *
+     *      @code
+     *      array(
+     *          'SA-CONTRIB-2013-001' => array(
+     *              'advisory' => 'SA-CONTRIB-2013-001',
+     *              'link' => 'http://drupal.org/node/91990',
+     *              'project' => 'Example module',
+     *              'date' => '2013-September-18',
+     *              'vulnerabilities' => 'Cross Site Scipting, Acces bypass',
+     *          ),
+     *          ...
+     *      )
      */
     public function getData()
     {
