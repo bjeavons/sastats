@@ -1,6 +1,6 @@
-# Drupal.org Security Advisory scraper and parser
+## Drupal.org Security Advisory scraper and parser
 
-## Use
+### Use
 
 1. clone this repository
 2. composer install
