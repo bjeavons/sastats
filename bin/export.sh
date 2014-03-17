@@ -21,7 +21,7 @@ fi
 curl -s $BASE$TYPE > $DIR/$TYPE-0.html
 for (( i=1; i<=$2; i++ ))
 do
-  curl -s $BASE$TYPE?page=$i > $DIR/$TYPE-$i.html
+  curl -s $BASE$TYPE?page=$i > $DIR/$1-$i.html
 done
 
 echo $1 $2 > $DIR/LASTRUN

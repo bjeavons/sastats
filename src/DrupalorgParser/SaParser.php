@@ -37,40 +37,32 @@ class SaParser {
      * Parse SA list page and store SA data.
      *
      * @param string $html
-     *   HTML page of list of SA e.g. http://drupal.org/security/contrib
+     *   HTML page of list of SAs e.g. content of http://drupal.org/security/contrib
      */
     public function parseList($html)
     {
         // @todo handle URL ?
         foreach (htmlqp($html, 'div.views-row') as $row) {
 
-            $element = $row->find('.node-title');
+            $element = $row->find('.node');
             $id = $this->extractTitle($element->text());
+            $this->setData($id, 'advisory', $id);
             $link = self::BASE_URL . $element->find('a')->attr('href');
+            $this->setData($id, 'link', $link);
             foreach ($row->find('li') as $listElement) {
                 $text = $listElement->text();
                 switch ($text) {
-                    case strpos($text, 'Project') !== FALSE:
-                        $project = $this->extractProject($text);
-
+                    case strpos($text, 'Project') === 0:
+                        $this->setData($id, 'project', $this->extractProject($text));
                         break;
-                    case strpos($text, 'Date') !== FALSE:
-                        $date = $this->extractDate($text);
-
+                    case strpos($text, 'Date') === 0:
+                        $this->setData($id, 'date', $this->extractDate($text));
                         break;
-                    case strpos($text, 'Vulnerability') !== FALSE:
-                        $vulnerabilities = $this->extractVulnerability($text);
-
+                    case strpos($text, 'Vulnerability') === 0:
+                        $this->setData($id, 'vulnerabilities', $this->extractVulnerability($text));
                         break;
                 }
             }
-            // @todo wat if data not found
-
-            $this->setData($id, 'advisory', $id);
-            $this->setData($id, 'link', $link);
-            $this->setData($id, 'project', $project);
-            $this->setData($id, 'date', $date);
-            $this->setData($id, 'vulnerabilities', $vulnerabilities);
         }
 
     }
@@ -103,7 +95,8 @@ class SaParser {
      * @param $type
      * @param $value
      */
-    protected function setData($id , $type, $value) {
+    protected function setData($id , $type, $value)
+    {
         $this->dataStore[$id][$type] = $value;
     }
 
