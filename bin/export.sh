@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 DIR=$PWD/export
-BASE='https://drupal.org/security'
+BASE='https://www.drupal.org/security'
 
 TYPE='contrib'
 if [[ $1 = 'core' ]]; then
