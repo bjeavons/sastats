@@ -28,7 +28,14 @@ if (file_exists($last_run_file)) {
     }
 }
 
-$urls = $parser->getAdvisoryIds($type, $until);
+if ($until) {
+    $file = $html_output_dir . $until . '.html';
+    $content = file_get_contents($file);
+    $data = $parser->parseAdvisory($content);
+    var_export($data);
+}
+
+/*$urls = $parser->getAdvisoryIds($type, $until);
 if (empty($urls)) {
     if ($until) {
         print "No new $type SAs since $until" . PHP_EOL;
@@ -50,4 +57,4 @@ else{
     $last_run[$type . '_max_id'] = $max;
     $last_run['time'] = time();
     file_put_contents($last_run_file, json_encode($last_run));
-}
+}*/

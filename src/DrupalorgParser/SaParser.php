@@ -25,18 +25,8 @@ class SaParser {
      */
     protected $client;
 
-    /**
-     * @var array
-     */
-    protected $dataStore;
-
-    /**
-     * @param array $data_store
-     *
-     */
-    public function __construct($data_store = array())
+    public function __construct()
     {
-        $this->dataStore = $data_store;
         $this->client = new Client();
     }
 
@@ -77,127 +67,117 @@ class SaParser {
     }
 
     /**
-     * Parse SA list page and store SA data.
+     * Parse SA page and return structured data.
      *
      * @param string $html
-     *   HTML page of list of SAs e.g. content of http://drupal.org/security/contrib
+     *   HTML page for a SA.
+     *
+     * @return array
+     *   Array with elements:
+     *     id
+     *     project_short_name
+     *     project_full_name
+     *     versions
+     *     date
+     *     security_risk
+     *     vulnerabilities
      */
-    public function parseList($html)
+    public function parseAdvisory($html)
     {
-        // @todo handle URL ?
-        foreach (htmlqp($html, 'div.views-row') as $row) {
+        $data = array();
+        $crawler = new Crawler($html);
+        // Filter down to content for the node.
+        $crawler = $crawler->filter('div.node > div.content')->eq(0);
 
-            $element = $row->find('.node');
-            $id = $this->extractTitle($element->text());
-            $this->setData($id, 'advisory', $id);
-            $link = self::BASE_URL . $element->find('a')->attr('href');
-            $this->setData($id, 'link', $link);
-            foreach ($row->find('li') as $listElement) {
-                $text = $listElement->text();
-                switch ($text) {
-                    case strpos($text, 'Project') === 0:
-                        $this->setData($id, 'project', $this->extractProject($text));
-                        break;
-                    case strpos($text, 'Date') === 0:
-                        $this->setData($id, 'date', $this->extractDate($text));
-                        break;
-                    case strpos($text, 'Vulnerability') === 0:
-                        $this->setData($id, 'vulnerabilities', $this->extractVulnerability($text));
-                        break;
-                }
+        // First ul contains the prime advisory data elements.
+        $elements = $crawler->filter('ul')->eq(0)->filter('li');
+        foreach ($elements as $element) {
+            $element_crawler = new Crawler($element);
+            $this->parseAdvisoryElement($element_crawler, $data);
+        }
+
+        // Other interesting data can be parsed out based on section header.
+        //$sections = $crawler->next();
+        //$this->parseAdvisorySections($crawler, $data);
+
+        /*foreach ($lists as $list) {
+            $list_crawler = new Crawler($list);
+            $elements = $list_crawler->filter('li');
+            foreach ($elements as $element) {
+                $element_crawler = new Crawler($element);
+                $this->parseAdvisoryElement($element_crawler, $data);
             }
+        }*/
+        return $data;
+    }
+
+    /**
+     * Parse elements of an Advisory into structured data.
+     *
+     * @param Crawler $crawler
+     * @param array $data
+     */
+    protected function parseAdvisoryElement(Crawler $crawler, array &$data)
+    {
+        $text = $crawler->text();
+        switch (true) {
+            case strpos($text, 'Advisory ID:') === 0:
+                $data['id'] = trim(str_replace('Advisory ID: ', '', $text));
+                break;
+
+            case strpos($text, 'Version:') === 0:
+                $versions = trim(str_replace('Version: ', '', $text));
+                $data['versions'] = array_map('trim', explode(',', $versions));
+                break;
+
+            case strpos($text, 'Project:') === 0:
+                $data['project_full_name'] = trim($crawler->filter('a')->text());
+                $url = ltrim($crawler->filter('a')->attr('href'), '/');
+                $data['project_short_name'] = basename($url);
+                break;
+
+            case strpos($text, 'Date:') === 0:
+                $data['date'] = trim(str_replace('Date: ', '', $text));
+                break;
+
+            case strpos($text, 'Security risk:') === 0:
+                $data['security_risk'] = trim(str_replace('Security risk: ', '', $text));
+                break;
+
+            case strpos($text, 'Vulnerability:') === 0:
+                $vulnerabilities = trim(str_replace('Vulnerability: ', '', $text));
+                $data['vulnerabilities'] = array_map('trim', explode(',', $vulnerabilities));
+                break;
         }
     }
 
     /**
-     * Parse SA page and store SA data.
+     * Parse sections of a Advisory and extract certain data.
      *
-     * @param string $html
-     *   HTML page for a SA.
+     * @param $sections
+     * @param array $data
      */
-    public function parseSa($html)
+    protected function parseAdvisorySections($sections, array &$data)
     {
+        foreach ($sections as $section) {
+            $crawler = new Crawler($section);
+print $crawler->text();
+            // Extract based on header section.
+            if ($crawler->nodeName() == 'h2') {
+                $text = trim($crawler->text());
+                print $text;
+                switch (true) {
+                    case strpos($text, 'CVE identifier(s) issued') === 0:
+                        print $text;
+                        /*foreach ($list_crawler->filter('li') as $element) {
+                            $element_crawler = new Crawler($element);
+                            print $element_crawler->text();
+                        }*/
+                        break;
+                }
+            }
 
-    }
-
-    /**
-     * Get stored SA data.
-     *
-     * @return array
-     *      Array of stored SA data keyed by advisory ID.
-     *
-     *      @code
-     *      array(
-     *          'SA-CONTRIB-2013-001' => array(
-     *              'advisory' => 'SA-CONTRIB-2013-001',
-     *              'link' => 'http://drupal.org/node/91990',
-     *              'project' => 'Example module',
-     *              'date' => '2013-September-18',
-     *              'vulnerabilities' => 'Cross Site Scipting, Acces bypass',
-     *          ),
-     *          ...
-     *      )
-     */
-    public function getData()
-    {
-        return $this->dataStore;
-    }
-
-    /**
-     * @param $id
-     * @param $type
-     * @param $value
-     */
-    protected function setData($id , $type, $value)
-    {
-        $this->dataStore[$id][$type] = $value;
-    }
-
-    protected function extractTitle($text)
-    {
-        list($text,) = explode(' - ', $text);
-        return trim($text);
-    }
-
-    /**
-     * @param $text
-     * @return string
-     */
-    protected function extractAdvisoryId($text)
-    {
-        list(,$text) = explode(':', $text);
-        return trim($text);
-    }
-
-    /**
-     * @param $text
-     * @return string
-     */
-    protected function extractProject($text)
-    {
-        list(,$text) = explode(':', $text);
-        list($project,) = explode('(third', $text);
-        return trim($project);
-    }
-
-    /**
-     * @param $text
-     * @return string
-     */
-    protected function extractDate($text)
-    {
-        list(,$text) = explode(':', $text);
-        return trim($text);
-    }
-
-    /**
-     * @param $text
-     * @return string
-     */
-    protected function extractVulnerability($text)
-    {
-        list(,$text) = explode(':', $text);
-        return trim($text);
+        }
     }
 
 }
