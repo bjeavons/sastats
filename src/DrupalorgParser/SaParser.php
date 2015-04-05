@@ -2,7 +2,8 @@
 
 namespace DrupalorgParser;
 
-use QueryPath\QueryPath;
+use Goutte\Client;
+use Symfony\Component\DomCrawler\Crawler;
 
 /**
  * Class SaParser for parsing Drupal.org Security Advisories
@@ -12,12 +13,17 @@ class SaParser {
     /**
      * @var string
      */
-    const BASE_URL = 'https://drupal.org';
+    const BASE_URL = 'https://www.drupal.org';
 
     /**
-     * @var QueryPath
+     * @var \Symfony\Component\DomCrawler\Crawler
      */
-    protected $doc;
+    protected $crawler;
+
+    /**
+     * @var \Goutte\Client
+     */
+    protected $client;
 
     /**
      * @var array
@@ -31,6 +37,43 @@ class SaParser {
     public function __construct($data_store = array())
     {
         $this->dataStore = $data_store;
+        $this->client = new Client();
+    }
+
+    /**
+     * Get SA IDs and paths from listing pages.
+     *
+     * @param string $type
+     *   SA type to retrieve, 'core' or 'contrib'.
+     * @param string $until
+     *   SA ID to retrieve up to.
+     *
+     * @return array
+     *   Array of SA IDs indexed by path.
+     */
+    public function getAdvisoryIds($type, $until = null)
+    {
+        $urls = array();
+        $list_url = self::BASE_URL . '/security';
+        if ($type === 'contrib') {
+            $list_url .= '/contrib';
+        }
+
+        $crawler = $this->client->request('GET', $list_url);
+        $filter = $crawler->filter('div.views-row');
+        foreach ($filter as $element) {
+            $crawler = new Crawler($element);
+            $path = ltrim($crawler->filter('a')->attr('href'), '/');
+            $id = $crawler->filter('li')->text();
+            $id = trim(str_replace('Advisory ID:', '', $id));
+            // Halt if reached ID limit.
+            if ($until && $id === $until) {
+                break;
+            }
+            $urls[$path] = $id;
+        }
+        // @todo add paging support till $until
+        return $urls;
     }
 
     /**
@@ -64,6 +107,16 @@ class SaParser {
                 }
             }
         }
+    }
+
+    /**
+     * Parse SA page and store SA data.
+     *
+     * @param string $html
+     *   HTML page for a SA.
+     */
+    public function parseSa($html)
+    {
 
     }
 
