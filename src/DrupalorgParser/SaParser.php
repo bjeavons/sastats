@@ -75,8 +75,8 @@ class SaParser {
      * @return array
      *   Array with elements:
      *     id
-     *     project_short_name
-     *     project_full_name
+     *     project_name_short
+     *     project_name
      *     versions
      *     date
      *     security_risk
@@ -97,8 +97,8 @@ class SaParser {
         }
 
         // Other interesting data can be parsed out based on section header.
-        //$sections = $crawler->next();
-        //$this->parseAdvisorySections($crawler, $data);
+        $sections = $elements = $crawler->filter('ul')->eq(0)->nextAll();
+        $this->parseAdvisorySections($sections, $data);
 
         /*foreach ($lists as $list) {
             $list_crawler = new Crawler($list);
@@ -131,9 +131,9 @@ class SaParser {
                 break;
 
             case strpos($text, 'Project:') === 0:
-                $data['project_full_name'] = trim($crawler->filter('a')->text());
+                $data['project_name'] = trim($crawler->filter('a')->text());
                 $url = ltrim($crawler->filter('a')->attr('href'), '/');
-                $data['project_short_name'] = basename($url);
+                $data['project_name_short'] = basename($url);
                 break;
 
             case strpos($text, 'Date:') === 0:
@@ -161,18 +161,66 @@ class SaParser {
     {
         foreach ($sections as $section) {
             $crawler = new Crawler($section);
-print $crawler->text();
             // Extract based on header section.
             if ($crawler->nodeName() == 'h2') {
                 $text = trim($crawler->text());
-                print $text;
                 switch (true) {
                     case strpos($text, 'CVE identifier(s) issued') === 0:
-                        print $text;
-                        /*foreach ($list_crawler->filter('li') as $element) {
+                        // Get the exact next list.
+                        $list_elements = $crawler->nextAll()->filter('ul')->eq(0)->filter('li');
+                        foreach ($list_elements as $element) {
                             $element_crawler = new Crawler($element);
-                            print $element_crawler->text();
-                        }*/
+                            $data['cves'][] = $element_crawler->text();
+                        }
+                        break;
+
+                    case strpos($text, 'Versions affected') === 0:
+                        // Get the exact next list.
+                        $list_elements = $crawler->nextAll()->filter('ul')->eq(0)->filter('li');
+                        foreach ($list_elements as $element) {
+                            $element_crawler = new Crawler($element);
+                            $data['versions_affected'][] = $element_crawler->text();
+                        }
+                        break;
+
+                    case strpos($text, 'Solution') === 0:
+                        // Get the exact next list.
+                        $list_elements = $crawler->nextAll()->filter('ul')->eq(0)->filter('li');
+                        foreach ($list_elements as $element) {
+                            $element_crawler = new Crawler($element);
+                            $data['solution'][] = $element_crawler->text();
+                            // @todo extract release nodes
+                        }
+                        break;
+
+                    case strpos($text, 'Reported by') === 0:
+                        // Get the exact next list.
+                        $list_elements = $crawler->nextAll()->filter('ul')->eq(0)->filter('li');
+                        foreach ($list_elements as $element) {
+                            $element_crawler = new Crawler($element);
+                            $data['reported_by'][] = $element_crawler->text();
+                            // @todo extract username and uid
+                        }
+                        break;
+
+                    case strpos($text, 'Fixed by') === 0:
+                        // Get the exact next list.
+                        $list_elements = $crawler->nextAll()->filter('ul')->eq(0)->filter('li');
+                        foreach ($list_elements as $element) {
+                            $element_crawler = new Crawler($element);
+                            $data['fixed_by'][] = $element_crawler->text();
+                            // @todo extract username and uid
+                        }
+                        break;
+
+                    case strpos($text, 'Coordinated by') === 0:
+                        // Get the exact next list.
+                        $list_elements = $crawler->nextAll()->filter('ul')->eq(0)->filter('li');
+                        foreach ($list_elements as $element) {
+                            $element_crawler = new Crawler($element);
+                            $data['coordinated_by'][] = $element_crawler->text();
+                            // @todo extract username and uid
+                        }
                         break;
                 }
             }
