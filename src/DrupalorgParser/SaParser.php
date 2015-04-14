@@ -43,27 +43,34 @@ class SaParser {
      */
     public function getAdvisoryIds($type, $until = null)
     {
-        $urls = array();
+        $data = array();
+        $page_param = '';
+        $page = 0;
+
         $list_url = self::BASE_URL . '/security';
         if ($type === 'contrib') {
             $list_url .= '/contrib';
         }
 
-        $crawler = $this->client->request('GET', $list_url);
-        $filter = $crawler->filter('div.views-row');
-        foreach ($filter as $element) {
-            $crawler = new Crawler($element);
-            $path = ltrim($crawler->filter('a')->attr('href'), '/');
-            $id = $crawler->filter('li')->text();
-            $id = trim(str_replace('Advisory ID:', '', $id));
-            // Halt if reached ID limit.
-            if ($until && $id === $until) {
+        $crawler = $this->client->request('GET', $list_url . $page_param);
+        // Get max pager pages.
+        $filter = $crawler->filter('div.content')->filter('li.pager-last > a');
+        $href = trim($filter->attr('href'));
+        $last_page = (int) substr($href, strpos($href, '?page=') + 6);
+
+        while ($page <= $last_page) {
+            $page++;
+            $page_ids = $this->parseIds($crawler);
+            $data = array_merge($data, $page_ids);
+            // Halt if last SA was found or reached last page.
+            if (in_array($until, $data) || $page > $last_page) {
                 break;
             }
-            $urls[$path] = $id;
+            $page_param = '?page=' . $page;
+            $crawler = $this->client->request('GET', $list_url . $page_param);
         }
-        // @todo add paging support till $until
-        return $urls;
+
+        return $data;
     }
 
     /**
@@ -101,6 +108,35 @@ class SaParser {
         $this->parseAdvisorySections($sections, $data);
 
         return $data;
+    }
+
+    /**
+     * Parse SA list into SA IDs.
+     *
+     * @param Crawler $crawler
+     *   Crawler on SA list page.
+     *
+     * @return array
+     *   Array of SA IDs indexed by remote path.
+     */
+    protected function parseIds($crawler)
+    {
+        $ids = array();
+        $filter = $crawler->filter('div.views-row');
+        foreach ($filter as $element) {
+            $crawler = new Crawler($element);
+            $path = ltrim($crawler->filter('a')->attr('href'), '/');
+            $id = $crawler->filter('li')->text();
+            if (strpos($id, 'Advisory ID') !== false) {
+                $id = trim(str_replace('Advisory ID:', '', $id));
+                $ids[$path] = $id;
+            }
+            else {
+                // One SA has no advisory ID so just use node path.
+                $ids[$path] = $path;
+            }
+        }
+        return $ids;
     }
 
     /**

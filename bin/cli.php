@@ -1,5 +1,16 @@
 <?php
 
+/**
+ * @file
+ *
+ * CLI for sastats
+ *
+ * @todo future commands
+ *  - download specific SA by ID
+ *  - download specific SAs by list page
+ *  - test SA parsing
+ */
+
 require_once __DIR__.'/../vendor/autoload.php';
 
 use DrupalorgParser\SaParser;
@@ -41,6 +52,7 @@ $parser = new SaParser();
 
 // Download SAs from drupal.org.
 if ($command === 'download') {
+    $written = 0;
     $urls = $parser->getAdvisoryIds($type, $until);
     if (empty($urls)) {
         if ($until) {
@@ -53,16 +65,22 @@ if ($command === 'download') {
     else{
         $max = '-1';
         foreach ($urls as $path => $id) {
-            $content = file_get_contents($parser::BASE_URL . '/' . $path);
             $file = $id . '.html';
-            file_put_contents($html_output_dir . $file, $content);
             $max = ($id > $max) ? $id : $max;
+            if (file_exists($html_output_dir . $file)) {
+                continue;
+            }
+            $content = file_get_contents($parser::BASE_URL . '/' . $path);
+            file_put_contents($html_output_dir . $file, $content);
+            $written++;
         }
 
+        // Update state file.
         $last_run['type'] = $type;
         $last_run[$type . '_latest_id'] = $max;
         $last_run['time'] = time();
         file_put_contents($last_run_file, json_encode($last_run));
+        print "Exported $written SAs since $until" . PHP_EOL;
     }
 }
 // Extract SA data from saved SAs.
