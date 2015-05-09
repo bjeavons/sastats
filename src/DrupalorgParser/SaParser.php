@@ -1,5 +1,11 @@
 <?php
 
+/**
+ * @file
+ *
+ * Class for Drupal.org SA parsing.
+ */
+
 namespace DrupalorgParser;
 
 use Goutte\Client;
@@ -8,7 +14,8 @@ use Symfony\Component\DomCrawler\Crawler;
 /**
  * Class SaParser for parsing Drupal.org Security Advisories
  */
-class SaParser {
+class SaParser
+{
 
     /**
      * @var string
@@ -91,7 +98,21 @@ class SaParser {
      */
     public function parseAdvisory($html)
     {
-        $data = array();
+        $data = array(
+            'id' => '',
+            'project_name' => '',
+            'project_name_short' => '',
+            'versions' => '',
+            'date' => '',
+            'security_risk' => '',
+            'vulnerabilities' => '',
+            'cves' => '',
+            'versions_affected' => '',
+            'solution' => '',
+            'reported_by' => '',
+            'fixed_by' => '',
+            'coordinated_by' => '',
+        );
         $crawler = new Crawler($html);
         // Filter down to content for the node.
         $crawler = $crawler->filter('div.node > div.content')->eq(0);
@@ -147,34 +168,56 @@ class SaParser {
      */
     protected function parseAdvisoryElement(Crawler $crawler, array &$data)
     {
-        $text = $crawler->text();
+        $text = trim($crawler->text());
         switch (true) {
             case strpos($text, 'Advisory ID:') === 0:
-                $data['id'] = trim(str_replace('Advisory ID: ', '', $text));
+                $id = str_replace('Advisory ID: ', '', $text);
+                $data['id'] = trim($id, '. ');
                 break;
 
             case strpos($text, 'Version:') === 0:
-                $versions = trim(str_replace('Version: ', '', $text));
+            case strpos($text, 'Versions:') === 0:
+                $versions = preg_replace('/[Vv]ersions?: /', '', $text);
+                $versions = preg_replace('/ and /', ', ', $versions);
                 $data['versions'] = trim($versions);
                 break;
 
             case strpos($text, 'Project:') === 0:
-                $data['project_name'] = trim($crawler->filter('a')->text());
-                $url = ltrim($crawler->filter('a')->attr('href'), '/');
-                $data['project_name_short'] = basename($url);
+            case strpos($text, 'Projects:') === 0:
+                try {
+                    $project_name = trim($crawler->filter('a')->text());
+                    $url = ltrim($crawler->filter('a')->attr('href'), '/');
+                    $data['project_name_short'] = basename($url);
+                }
+                catch (\InvalidArgumentException $e) {
+                    // Not all SAs link to project. E.g. SA-2008-031
+                    $project_name = preg_replace('/Projects?: /', '', $text);
+                    $data['project_name_short'] = '';
+                }
+                if (empty($project_name)) {
+                    // Some project links are incorrect. E.g. DRUPAL-SA-CONTRIB-2012-029.
+                    $project_name = preg_replace('/Projects?: /', '', $text);
+                }
+                $project_name = preg_replace('/\(third.?party (module|theme)s?\)/i', '', trim($project_name));
+                $project_name = preg_replace('/\multiple third.?party (module|theme)s?/i', '', $project_name);
+                $data['project_name'] = trim($project_name, '. -');;
                 break;
 
             case strpos($text, 'Date:') === 0:
-                $data['date'] = trim(str_replace('Date: ', '', $text));
+                $data['date'] = trim(str_replace('Date: ', '', $text), '. ');
                 break;
 
             case strpos($text, 'Security risk:') === 0:
-                $data['security_risk'] = trim(str_replace('Security risk: ', '', $text));
+            case strpos($text, 'Security risks:') === 0:
+                $security_risk = preg_replace('/Security risks?: /i', '', $text);
+                $security_risk = preg_replace('/\(definition of risk levels\)/i', '', $security_risk);
+                $data['security_risk'] = trim($security_risk, '. ');
                 break;
 
             case strpos($text, 'Vulnerability:') === 0:
-                $vulnerabilities = trim(str_replace('Vulnerability: ', '', $text));
-                $data['vulnerabilities'] = trim($vulnerabilities);
+            case strpos($text, 'Vulnerabilities:') === 0:
+                $vulnerabilities  = preg_replace('/Vulnerabilit(y|ies): /i', '', $text);
+                $data['vulnerabilities'] = trim($vulnerabilities, '. ');
                 break;
         }
     }
@@ -194,12 +237,16 @@ class SaParser {
                 $text = trim($crawler->text());
                 switch (true) {
                     case strpos($text, 'CVE identifier(s) issued') === 0:
+                        $placeholder = "A CVE identifier will be requested";
                         $cves = array();
                         // Get the exact next list.
                         $list_elements = $crawler->nextAll()->filter('ul')->eq(0)->filter('li');
                         foreach ($list_elements as $element) {
                             $element_crawler = new Crawler($element);
-                            $cves[] = $element_crawler->text();
+                            $text = $element_crawler->text();
+                            if (strpos($text, $placeholder) === FALSE) {
+                                $cves[] = $text;
+                            }
                         }
                         $data['cves'] = implode(', ', $cves);
                         break;

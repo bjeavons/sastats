@@ -1,11 +1,14 @@
 {
-    "name": "bjeavons/drupalorg-sastats",
+    "name": "bjeavons/sastats",
     "type": "library",
     "description": "A parser for extracting Drupal Security Advisory data.",
     "keywords": ["drupal"],
     "license": "GPL-3.0",
     "require": {
         "fabpot/goutte": "~2.0"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "~4.0"
     },
     "autoload": {
         "psr-0": {

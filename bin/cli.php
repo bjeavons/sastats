@@ -87,7 +87,7 @@ if ($command === 'download') {
 elseif ($command === 'extract') {
     $store = array();
     foreach (scandir($html_output_dir) as $file) {
-        if (strpos($file, 'DRUPAL-SA-') === 0) {
+        if (strpos($file, 'SA-') !== false) {
             $content = file_get_contents($html_output_dir . $file);
             $data = $parser->parseAdvisory($content);
             $store[] = $data;
