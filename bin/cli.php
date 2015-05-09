@@ -4,11 +4,6 @@
  * @file
  *
  * CLI for sastats
- *
- * @todo future commands
- *  - download specific SA by ID
- *  - download specific SAs by list page
- *  - test SA parsing
  */
 
 require_once __DIR__.'/../vendor/autoload.php';

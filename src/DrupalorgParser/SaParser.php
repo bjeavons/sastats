@@ -95,6 +95,16 @@ class SaParser
      *     date
      *     security_risk
      *     vulnerabilities
+     *     cves
+     *     versions_affected
+     *     solution
+     *     releases
+     *     reported_by
+     *     reported_by_users
+     *     fixed_by
+     *     fixed_by_users
+     *     coordinated_by
+     *     coordinated_by_users
      */
     public function parseAdvisory($html)
     {
@@ -109,9 +119,13 @@ class SaParser
             'cves' => '',
             'versions_affected' => '',
             'solution' => '',
+            'releases' => '',
             'reported_by' => '',
+            'reported_by_users' => '',
             'fixed_by' => '',
+            'fixed_by_users' => '',
             'coordinated_by' => '',
+            'coordinated_by_users' => '',
         );
         $crawler = new Crawler($html);
         // Filter down to content for the node.
@@ -186,8 +200,10 @@ class SaParser
             case strpos($text, 'Projects:') === 0:
                 try {
                     $project_name = trim($crawler->filter('a')->text());
-                    $url = ltrim($crawler->filter('a')->attr('href'), '/');
-                    $data['project_name_short'] = basename($url);
+                    $short = $this->extractDrupalLinkBase($crawler);
+                    if ($short) {
+                        $data['project_name_short'] = $short;
+                    }
                 }
                 catch (\InvalidArgumentException $e) {
                     // Not all SAs link to project. E.g. SA-2008-031
@@ -232,6 +248,7 @@ class SaParser
     {
         foreach ($sections as $section) {
             $crawler = new Crawler($section);
+            $users = $releases = array();
             // Extract based on header section.
             if ($crawler->nodeName() == 'h2') {
                 $text = trim($crawler->text());
@@ -269,9 +286,18 @@ class SaParser
                         foreach ($list_elements as $element) {
                             $element_crawler = new Crawler($element);
                             $solution[] = trim($element_crawler->text());
-                            // @todo extract release nodes
+                            try {
+                                $url = ltrim($element_crawler->filter('a')->attr('href'), '/');
+                                if (strpos($url, 'drupal.org') !== FALSE || strpos($url, 'http') === FALSE) {
+                                    $releases[] = $url;
+                                }
+                            }
+                            catch (\InvalidArgumentException $e) {
+                                // Ignore.
+                            }
                         }
                         $data['solution'] = implode(', ', $solution);
+                        $data['releases'] = implode(', ', $releases);
                         break;
 
                     case strpos($text, 'Reported by') === 0:
@@ -281,9 +307,13 @@ class SaParser
                         foreach ($list_elements as $element) {
                             $element_crawler = new Crawler($element);
                             $reported_by [] = trim($element_crawler->text());
-                            // @todo extract username and uid
+                            $user = $this->extractDrupalLinkBase($element_crawler);
+                            if ($user) {
+                                $users[] = $user;
+                            }
                         }
                         $data['reported_by'] = implode(', ', $reported_by);
+                        $data['reported_by_users'] = implode(', ', $users);
                         break;
 
                     case strpos($text, 'Fixed by') === 0:
@@ -293,9 +323,13 @@ class SaParser
                         foreach ($list_elements as $element) {
                             $element_crawler = new Crawler($element);
                             $fixed_by[] = trim($element_crawler->text());
-                            // @todo extract username and uid
+                            $user = $this->extractDrupalLinkBase($element_crawler);
+                            if ($user) {
+                                $users[] = $user;
+                            }
                         }
                         $data['fixed_by'] = implode(', ', $fixed_by);
+                        $data['fixed_by_users'] = implode(', ', $users);
                         break;
 
                     case strpos($text, 'Coordinated by') === 0:
@@ -305,9 +339,13 @@ class SaParser
                         foreach ($list_elements as $element) {
                             $element_crawler = new Crawler($element);
                             $coordinated_by[] = trim($element_crawler->text());
-                            // @todo extract username and uid
+                            $user = $this->extractDrupalLinkBase($element_crawler);
+                            if ($user) {
+                                $users[] = $user;
+                            }
                         }
                         $data['coordinated_by'] = implode(', ', $coordinated_by);
+                        $data['coordinated_by_users'] = implode(', ', $users);
                         break;
                 }
             }
@@ -315,4 +353,22 @@ class SaParser
         }
     }
 
+    /**
+     * Extract URL base path from drupal.org link in a crawler element.
+     *
+     * @param Crawler $crawler
+     * @return string
+     */
+    protected function extractDrupalLinkBase(Crawler $crawler)
+    {
+        try {
+            $url = ltrim($crawler->filter('a')->attr('href'), '/');
+            if (strpos($url, 'drupal.org') !== FALSE || strpos($url, 'http') === FALSE) {
+                return basename($url);
+            }
+        }
+        catch (\InvalidArgumentException $e) {
+            // Ignore.
+        }
+    }
 }
