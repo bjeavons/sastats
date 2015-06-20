@@ -2,15 +2,15 @@
 
 /**
  * @file
- *
+ * Download SAs from drupal.org
  */
 
 namespace SaStats\Console;
 
 use Symfony\Component\Console\Command\Command;
+use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
-use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 
 use DrupalorgParser\SaParser;
@@ -21,6 +21,24 @@ use DrupalorgParser\SaParser;
  */
 class DownloadCommand extends Command
 {
+
+    /**
+     * @var array
+     */
+    protected $config;
+
+    /**
+     * @var string
+     */
+    protected $last_run_file;
+
+    public function __construct(array $config = array())
+    {
+        parent::__construct();
+        $this->config = $config;
+        $this->last_run_file = $this->config['data_dir'] . $this->config['last_run_file'];
+    }
+
     protected function configure()
     {
         $this
@@ -42,23 +60,17 @@ class DownloadCommand extends Command
     protected function execute(InputInterface $input, OutputInterface $output)
     {
         $until = null;
+        $content = $this->readFile($this->last_run_file);
+        $last_run = json_decode($content, true);
+
         $type = $input->getArgument('type');
         if ($input->getOption('until')) {
             $until = $input->getOption('until');
         }
-
-        // @todo inject in this config
-        $data_dir = getcwd() . '/data/';
-        $html_output_dir = $data_dir . $type . '/html/';
-        $last_run_file = $data_dir . 'LASTDOWNLOAD.json';
-
-        if (file_exists($last_run_file)) {
-            $content = file_get_contents($last_run_file);
-            $last_run = json_decode($content, true);
-            if (is_null($until) && !empty($last_run[$type . '_latest_id'])) {
-                $until = $last_run[$type . '_latest_id'];
-            }
+        if (!$until && !empty($last_run[$type . '_latest_id'])) {
+            $until = $last_run[$type . '_latest_id'];
         }
+        $html_output_dir = $this->config['data_dir'] . $type . '/html/';
 
         $written = 0;
         $parser = new SaParser();
@@ -81,8 +93,9 @@ class DownloadCommand extends Command
                 if (file_exists($html_output_dir . $file)) {
                     continue;
                 }
-                $content = file_get_contents($parser::BASE_URL . '/' . $path);
-                file_put_contents($html_output_dir . $file, $content);
+                // Download file.
+                $content = $this->readFile($parser::BASE_URL . '/' . $path);
+                $this->writeFile($content, $html_output_dir . $file);
                 $written++;
             }
 
@@ -90,8 +103,31 @@ class DownloadCommand extends Command
             $last_run['type'] = $type;
             $last_run[$type . '_latest_id'] = $max;
             $last_run['time'] = time();
-            file_put_contents($last_run_file, json_encode($last_run));
+
+            $this->writeFile(json_encode($last_run), $this->last_run_file);
             $output->writeln("Exported $written SAs since $until");
         }
+    }
+
+    /**
+     * Read a file.
+     *
+     * @param string $file
+     * @return string
+     */
+    protected function readFile($file)
+    {
+        return file_get_contents($file);
+    }
+
+    /**
+     * Write content to a file.
+     *
+     * @param string $content
+     * @param string $file
+     */
+    protected function writeFile($content, $file)
+    {
+        file_put_contents($file, $content);
     }
 }
