@@ -4,10 +4,8 @@ Pre-flight check
  * confirm LASTDOWNLOAD.json is correct (has SA ID & not node/nid)
 
 CLI commands
- * download specific SA by ID
  * download specific SAs by list page
  * test SA parsing
- * use console?
 
 ### Manual
 

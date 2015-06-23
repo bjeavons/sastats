@@ -32,11 +32,22 @@ class DownloadCommand extends Command
      */
     protected $last_run_file;
 
+    /**
+     * @var OutputInterface
+     */
+    protected $out;
+
+    /**
+     * @var SaParser
+     */
+    protected $parser;
+
     public function __construct(array $config = array())
     {
         parent::__construct();
         $this->config = $config;
         $this->last_run_file = $this->config['data_dir'] . $this->config['last_run_file'];
+        $this->parser = new SaParser();
     }
 
     protected function configure()
@@ -46,67 +57,107 @@ class DownloadCommand extends Command
             ->setDescription('Download SAs from drupal.org')
             ->addArgument(
                 'type',
-                InputArgument::REQUIRED,
-                'Download either core or contrib'
+                InputArgument::OPTIONAL,
+                'Download either core or contrib, defaults to core'
             )
             ->addOption(
                 'until',
                 null,
                 InputOption::VALUE_OPTIONAL,
                 'SA ID to download up till'
+            )
+            ->addOption(
+                'nid',
+                null,
+                InputOption::VALUE_OPTIONAL,
+                'Specific SA node ID to download'
             );
     }
 
     protected function execute(InputInterface $input, OutputInterface $output)
     {
+        $this->out = $output;
         $until = null;
         $content = $this->readFile($this->last_run_file);
         $last_run = json_decode($content, true);
 
         $type = $input->getArgument('type');
-        if ($input->getOption('until')) {
-            $until = $input->getOption('until');
+        if ($type === 'core' || $type === 'contrib') {
+            if ($input->getOption('until')) {
+                $until = $input->getOption('until');
+            }
+            if (!$until && !empty($last_run[$type . '_latest_id'])) {
+                $until = $last_run[$type . '_latest_id'];
+            }
+            $this->downloadFromList($type, $until);
         }
-        if (!$until && !empty($last_run[$type . '_latest_id'])) {
-            $until = $last_run[$type . '_latest_id'];
+        elseif ($input->getOption('nid')) {
+            $sa_nid = $input->getOption('nid');
+            $this->downloadSaNid($sa_nid);
         }
-        $html_output_dir = $this->config['data_dir'] . $type . '/html/';
+    }
 
+    /**
+     * Download SAs from listing pages.
+     *
+     * @param string $type
+     * @param string $until
+     */
+    protected function downloadFromList($type, $until = null)
+    {
+        $html_output_dir = $this->config['data_dir'] . $type . '/html/';
         $written = 0;
-        $parser = new SaParser();
-        $urls = $parser->getAdvisoryIds($type, $until);
+        $urls = $this->parser->getAdvisoryIds($type, $until);
         if (empty($urls)) {
             if ($until) {
-                $output->writeln("No new $type SAs since $until");
+                $this->out->writeln("No new $type SAs since $until");
                 return;
             }
             else {
-                $output->writeln("No SAs found, probably an error in parsing");
+                $this->out->writeln("No SAs found, probably an error in parsing");
                 return;
             }
         }
-        else{
-            $max = '-1';
-            foreach ($urls as $path => $id) {
-                $file = $id . '.html';
-                $max = ($id > $max) ? $id : $max;
-                if (file_exists($html_output_dir . $file)) {
-                    continue;
-                }
-                // Download file.
-                $content = $this->readFile($parser::BASE_URL . '/' . $path);
-                $this->writeFile($content, $html_output_dir . $file);
-                $written++;
+        $max = '-1';
+        foreach ($urls as $path => $id) {
+            $file = $id . '.html';
+            $max = ($id > $max) ? $id : $max;
+            if (file_exists($html_output_dir . $file)) {
+                continue;
             }
-
-            // Update state file.
-            $last_run['type'] = $type;
-            $last_run[$type . '_latest_id'] = $max;
-            $last_run['time'] = time();
-
-            $this->writeFile(json_encode($last_run), $this->last_run_file);
-            $output->writeln("Exported $written SAs since $until");
+            $content = $this->readFile(SaParser::BASE_URL . '/' . $path);
+            $this->writeFile($content, $html_output_dir . $file);
+            $written++;
         }
+
+        // Update state file.
+        $last_run['type'] = $type;
+        $last_run[$type . '_latest_id'] = $max;
+        $last_run['time'] = time();
+
+        $this->writeFile(json_encode($last_run), $this->last_run_file);
+        $this->out->writeln("Exported $written SAs since $until");
+    }
+
+    /**
+     * Download a specific SA.
+     *
+     * @param string $nid
+     */
+    protected function downloadSaNid($nid)
+    {
+        $content = $this->readFile(SaParser::BASE_URL . '/node/' . $nid);
+        $data = $this->parser->parseAdvisory($content);
+        if (empty($data['id']) || emtpy($data['project_short_name'])) {
+            $this->out->writeln("Unable to parse node $nid");
+            return;
+        }
+        $type = $data['project_name_short'] === 'drupal' ? 'core' : 'contrib';
+
+        $html_output_dir = $this->config['data_dir'] . $type . '/html/';
+        $file = $html_output_dir . $data['id'] . '.html';
+        $this->writeFile($content, $file);
+        $this->out->writeln("Exported {$data['id']} to $file");
     }
 
     /**
