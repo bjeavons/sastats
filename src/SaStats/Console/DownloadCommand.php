@@ -148,7 +148,7 @@ class DownloadCommand extends Command
     {
         $content = $this->readFile(SaParser::BASE_URL . '/node/' . $nid);
         $data = $this->parser->parseAdvisory($content);
-        if (empty($data['id']) || emtpy($data['project_short_name'])) {
+        if (empty($data['id']) || empty($data['project_name_short'])) {
             $this->out->writeln("Unable to parse node $nid");
             return;
         }

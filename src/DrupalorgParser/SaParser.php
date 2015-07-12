@@ -89,6 +89,7 @@ class SaParser
      * @return array
      *   Array with elements:
      *     id
+     *     nid
      *     project_name_short
      *     project_name
      *     versions
@@ -110,6 +111,7 @@ class SaParser
     {
         $data = array(
             'id' => '',
+            'nid' => '',
             'project_name' => '',
             'project_name_short' => '',
             'versions' => '',
@@ -128,9 +130,15 @@ class SaParser
             'coordinated_by_users' => '',
         );
         $crawler = new Crawler($html);
+
+        // Get node ID.
+        $classes = $crawler->filter('body')->attr('class');
+        if (preg_match('/(page-node-[0-9]+)/', $classes, $match)) {
+            $data['nid'] = str_replace('page-node-', '', $match[1]);
+        }
+
         // Filter down to content for the node.
         $crawler = $crawler->filter('div.node > div.content')->eq(0);
-
         // First ul contains the prime advisory data elements.
         $elements = $crawler->filter('ul')->eq(0)->filter('li');
         foreach ($elements as $element) {
@@ -270,13 +278,29 @@ class SaParser
 
                     case strpos($text, 'Versions affected') === 0:
                         $versions_affected = array();
-                        // Get the exact next list.
-                        $list_elements = $crawler->nextAll()->filter('ul')->eq(0)->filter('li');
-                        foreach ($list_elements as $element) {
-                            $element_crawler = new Crawler($element);
-                            $versions_affected[] = $element_crawler->text();
+                        // Get the next element if ul or p.
+                        $element = $crawler->nextAll()->filter('ul,p')->eq(0);//->filter('li');
+                        if ($element->nodeName() === 'ul') {
+                            foreach ($element->filter('li') as $element) {
+                                $element_crawler = new Crawler($element);
+                                $versions_affected[] = $element_crawler->text();
+                            }
+                            $data['versions_affected'] = implode(', ' , $versions_affected);
                         }
-                        $data['versions_affected'] = implode(', ' , $versions_affected);
+                        else {
+                            $data['versions_affected'] = $element->text();
+                        }
+                        // Older SAs don't have top-level versions data.
+                        if (empty($data['versions']) && preg_match_all('/((4\.[5-7]\.)|[5-7]\.x)/', $data['versions_affected'], $matches)) {
+                            $versions = array();
+                            foreach ($matches as $match) {
+                                $versions = array_unique(array_merge($versions, $match));
+                                array_walk($versions, function (&$value) {
+                                    $value .= strpos($value, 'x') === FALSE ? 'x' : '';
+                                });
+                            }
+                            $data['versions'] = implode(', ', $versions);
+                        }
                         break;
 
                     case strpos($text, 'Solution') === 0:

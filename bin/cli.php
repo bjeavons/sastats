@@ -6,6 +6,7 @@ require __DIR__ . '/../vendor/autoload.php';
 use Symfony\Component\Console\Application;
 use SaStats\Console\DownloadCommand;
 use SaStats\Console\ExtractCommand;
+use SaStats\Console\CombineCommand;
 
 $config = array(
     'data_dir' => getcwd() . '/data/',
@@ -21,5 +22,6 @@ $application = new Application();
 $application->addCommands(array(
     new DownloadCommand($config),
     new ExtractCommand($config),
+    new CombineCommand($config),
 ));
 $application->run();

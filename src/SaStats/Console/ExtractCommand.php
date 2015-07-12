@@ -43,7 +43,7 @@ class ExtractCommand extends Command
     {
         $this
             ->setName('extract')
-            ->setDescription('Extract data from downloaded SAs')
+            ->setDescription('Extract data from HTML SAs into JSON ')
             ->addArgument(
                 'type',
                 InputArgument::REQUIRED,
@@ -53,25 +53,64 @@ class ExtractCommand extends Command
 
     protected function execute(InputInterface $input, OutputInterface $output)
     {
-        $store = array();
         $type = $input->getArgument('type');
-        $html_output_dir = $this->config['data_dir'] . $type . '/html/';
-        $data_out_file = $this->config['data_dir'] . $type . '/DATA.tsv';
+        $html_input_dir = $this->config['data_dir'] . $type . '/html/';
+        $json_output_dir = $this->config['data_dir'] . $type . '/json/';
+        $files = 0;
 
         $parser = new SaParser();
-        foreach (scandir($html_output_dir) as $file) {
+        foreach (scandir($html_input_dir) as $file) {
             if (strpos($file, 'SA-') !== false) {
-                $content = $this->readFile($html_output_dir . $file);
+                $content = $this->readFile($html_input_dir . $file);
                 $data = $parser->parseAdvisory($content);
-                $store[] = $data;
+                $this->manipulateData($data);
+
+                $file = $json_output_dir . $data['id'] . '.json';
+                $this->writeJsonFile($data, $file);
+                $files++;
             }
         }
-        $parsed_count = count($store);
-        // Write out data.
-        if (!empty($store)) {
-            $this->writeTsvFile($store, $data_out_file);
-            $output->writeln("Parsed $parsed_count SAs and extracted data to $data_out_file");
+        $output->writeln("Parsed $files SAs and extracted data to JSON");
+    }
+
+    /**
+     * Manipulate extracted data to provide simplified fields.
+     *
+     * Adds fieldsto JSON data:
+     *   vulnerability_ids
+     *
+     * @param array $data
+     */
+    protected function manipulateData(&$data)
+    {
+        $vulnerability_ids = array();
+        if (!empty($data['vulnerabilities'])) {
+
+            $vulnerabilities = strtolower($data['vulnerabilities']);
+            if (strpos($vulnerabilities, 'site scripting') || strpos($vulnerabilities, 'xss')) {
+                $vulnerability_ids[] = 'XSS';
+            }
+            if (strpos($vulnerabilities, 'site request forger')) {
+                $vulnerability_ids[] = 'CSRF';
+            }
+            if (strpos($vulnerabilities, 'sql inject')) {
+                $vulnerability_ids[] = 'SQLi';
+            }
+            if (strpos($vulnerabilities, 'of service')) {
+                $vulnerability_ids[] = 'DOS';
+            }
+            if (strpos($vulnerabilities, 'access') || strpos($vulnerabilities, 'authoriz')) {
+                $vulnerability_ids[] = 'Access bypass';
+            }
+            if (strpos($vulnerabilities, 'execution')) {
+                $vulnerability_ids[] = 'Code execution';
+            }
+            if (strpos($vulnerabilities, 'information disclosure')) {
+                $vulnerability_ids[] = 'Information disclosure';
+            }
+            $vulnerability_ids = implode(',', array_unique($vulnerability_ids));
         }
+        $data['vulnerability_ids'] = $vulnerability_ids;
     }
 
     /**
@@ -86,18 +125,14 @@ class ExtractCommand extends Command
     }
 
     /**
-     * Write array of data to TSV file.
+     * Write array of data to JSON file.
      *
      * @param array $content
      * @param string $file
      */
-    protected function writeTsvFile($content, $file)
+    protected function writeJsonFile($content, $file)
     {
-        $handle = fopen($file, 'w+');
-        fputcsv($handle, array_keys($content[0]), chr(9));
-        foreach ($content as $row) {
-            fputcsv($handle, $row, chr(9));
-        }
-        fclose($handle);
+        $content = json_encode($content);
+        file_put_contents($file, $content);
     }
 }
