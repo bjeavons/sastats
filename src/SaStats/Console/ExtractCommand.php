@@ -63,7 +63,6 @@ class ExtractCommand extends Command
             if (strpos($file, 'SA-') !== false) {
                 $content = $this->readFile($html_input_dir . $file);
                 $data = $parser->parseAdvisory($content);
-                $this->manipulateData($data);
 
                 $file = $json_output_dir . $data['id'] . '.json';
                 $this->writeJsonFile($data, $file);
@@ -71,46 +70,6 @@ class ExtractCommand extends Command
             }
         }
         $output->writeln("Parsed $files SAs and extracted data to JSON");
-    }
-
-    /**
-     * Manipulate extracted data to provide simplified fields.
-     *
-     * Adds fieldsto JSON data:
-     *   vulnerability_ids
-     *
-     * @param array $data
-     */
-    protected function manipulateData(&$data)
-    {
-        $vulnerability_ids = array();
-        if (!empty($data['vulnerabilities'])) {
-
-            $vulnerabilities = strtolower($data['vulnerabilities']);
-            if (strpos($vulnerabilities, 'site scripting') || strpos($vulnerabilities, 'xss')) {
-                $vulnerability_ids[] = 'XSS';
-            }
-            if (strpos($vulnerabilities, 'site request forger')) {
-                $vulnerability_ids[] = 'CSRF';
-            }
-            if (strpos($vulnerabilities, 'sql inject')) {
-                $vulnerability_ids[] = 'SQLi';
-            }
-            if (strpos($vulnerabilities, 'of service')) {
-                $vulnerability_ids[] = 'DOS';
-            }
-            if (strpos($vulnerabilities, 'access') || strpos($vulnerabilities, 'authoriz')) {
-                $vulnerability_ids[] = 'Access bypass';
-            }
-            if (strpos($vulnerabilities, 'execution')) {
-                $vulnerability_ids[] = 'Code execution';
-            }
-            if (strpos($vulnerabilities, 'information disclosure')) {
-                $vulnerability_ids[] = 'Information disclosure';
-            }
-            $vulnerability_ids = implode(',', array_unique($vulnerability_ids));
-        }
-        $data['vulnerability_ids'] = $vulnerability_ids;
     }
 
     /**

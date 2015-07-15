@@ -128,6 +128,7 @@ class SaParser
             'fixed_by_users' => '',
             'coordinated_by' => '',
             'coordinated_by_users' => '',
+            'vulnerability_ids' => '',
         );
         $crawler = new Crawler($html);
 
@@ -147,8 +148,9 @@ class SaParser
         }
 
         // Other interesting data can be parsed out based on section header.
-        $sections = $elements = $crawler->filter('ul')->eq(0)->nextAll();
+        $sections = $crawler->filter('ul')->eq(0)->nextAll();
         $this->parseAdvisorySections($sections, $data);
+        $this->parseVulnerabilities($crawler, $data);
 
         return $data;
     }
@@ -375,6 +377,63 @@ class SaParser
             }
 
         }
+    }
+
+    /**
+     * Parse a Advisory and set shorthand notation vulnerabilities.
+     *
+     * @param Crawler $crawler
+     * @param array $data
+     */
+    protected function parseVulnerabilities($crawler, array &$data)
+    {
+        // If $data['vulnerabilities'] contains just 'multiple vulnerabilities" than discover vulnerability IDs from
+        // full SA text.
+        $vulnerability_count = count(explode(',', $data['vulnerabilities']));
+        if ($vulnerability_count === 1 && stristr($data['vulnerabilities'], 'multiple vuln')) {
+            $text = $crawler->text();
+        }
+        else {
+            $text = $data['vulnerabilities'];
+        }
+
+        $vulnerability_ids = array();
+        if (stristr($text, 'site scripting') || stristr($text, 'xss')) {
+            $vulnerability_ids[] = 'XSS';
+        }
+        if (stristr($text, 'site request forger') || stristr($text, 'csrf'))  {
+            $vulnerability_ids[] = 'CSRF';
+        }
+        if (stristr($text, 'sql inject')) {
+            $vulnerability_ids[] = 'SQLi';
+        }
+        if (stristr($text, 'denial of service')) {
+            $vulnerability_ids[] = 'DOS';
+        }
+        if (stristr($text, 'access bypass')) {
+            $vulnerability_ids[] = 'Access bypass';
+        }
+        if (stristr($text, 'code execution')) {
+            $vulnerability_ids[] = 'Code execution';
+        }
+        if (stristr($text, 'information disclosure')) {
+            $vulnerability_ids[] = 'Information disclosure';
+        }
+        if (stristr($text, 'file inclu')) {
+            $vulnerability_ids[] = 'LFI';
+        }
+        if (stristr($text, 'session fixation')) {
+            $vulnerability_ids[] = 'Session';
+        }
+        if (stristr($text, 'open redirect')) {
+            $vulnerability_ids[] = 'Open redirect';
+        }
+        if (empty($vulnerability_ids)) {
+            $vulnerability_ids[] = 'Other';
+        }
+
+        $vulnerability_ids = implode(',', array_unique($vulnerability_ids));
+        $data['vulnerability_ids'] = $vulnerability_ids;
     }
 
     /**
